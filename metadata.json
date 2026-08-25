@@ -1,0 +1,6 @@
+{
+  "name": "AOEE - All Odisha Entrance Examination",
+  "description": "Official AOEE exam preparation app powered by Punyansu AI model with Phone OTP auth, CBT mock tests, past-to-future questions, privacy & safety protection.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
