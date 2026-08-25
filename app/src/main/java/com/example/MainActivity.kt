@@ -21,18 +21,23 @@ import com.example.data.local.SafetyLogEntity
 import com.example.data.local.TestResultEntity
 import com.example.data.local.UserSessionManager
 import com.example.data.model.ExamStream
+import com.example.data.model.MockTest
+import com.example.data.model.Question
 import com.example.data.repository.ExamRepository
 import com.example.data.repository.PunyansuAiRepository
 import com.example.ui.screens.*
 import com.example.ui.theme.AoeeTheme
 import kotlinx.coroutines.launch
 
+import com.example.util.DailyStudyTipsManager
 import com.example.util.NotificationHelper
 
 enum class Screen {
     AUTH,
     AUTH_LOGIN,
     HOME,
+    CATEGORY_DASHBOARD,
+    DAILY_STUDY_TIPS,
     AI_CHAT,
     MOCK_TEST,
     TEST_RESULT,
@@ -53,6 +58,12 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge()
 
         NotificationHelper.createNotificationChannel(this)
+        DailyStudyTipsManager.createNotificationChannel(this)
+        if (DailyStudyTipsManager.isNotificationsEnabled(this)) {
+            DailyStudyTipsManager.scheduleDailyTipAlarm(this)
+        }
+
+        val navigateToTarget = intent?.getStringExtra("navigate_to")
 
         val db = AppDatabase.getDatabase(this)
         val sessionManager = UserSessionManager(this)
@@ -62,9 +73,22 @@ class MainActivity : ComponentActivity() {
         setContent {
             AoeeTheme {
                 val userProfile by sessionManager.userProfile.collectAsStateWithLifecycle()
-                var currentScreen by remember { mutableStateOf(if (userProfile.isAuthenticated) Screen.HOME else Screen.AUTH) }
+                var currentScreen by remember {
+                    mutableStateOf(
+                        if (navigateToTarget == "daily_study_tips") {
+                            Screen.DAILY_STUDY_TIPS
+                        } else if (userProfile.isAuthenticated) {
+                            Screen.HOME
+                        } else {
+                            Screen.AUTH
+                        }
+                    )
+                }
                 
                 var activeTestResult by remember { mutableStateOf<TestResultEntity?>(null) }
+                var activeQuestionForAi by remember { mutableStateOf<Question?>(null) }
+                var activeCategoryStream by remember { mutableStateOf<ExamStream?>(null) }
+                var activeMockTestOverride by remember { mutableStateOf<MockTest?>(null) }
                 var emergencyAlertData by remember { mutableStateOf<Pair<String, String>?>(null) }
                 
                 val safetyLogs by db.safetyLogDao().getAllLogs().collectAsStateWithLifecycle(initialValue = emptyList())
@@ -115,7 +139,10 @@ class MainActivity : ComponentActivity() {
                                     HomeScreen(
                                         userProfile = userProfile,
                                         onNavigateToChat = { currentScreen = Screen.AI_CHAT },
-                                        onNavigateToMockTest = { currentScreen = Screen.MOCK_TEST },
+                                        onNavigateToMockTest = {
+                                            activeMockTestOverride = null
+                                            currentScreen = Screen.MOCK_TEST
+                                        },
                                         onNavigateToPastAttempts = { currentScreen = Screen.PAST_ATTEMPTS },
                                         onNavigateToPyqBank = { currentScreen = Screen.PYQ_BANK },
                                         onNavigateToPerformance = { currentScreen = Screen.PERFORMANCE },
@@ -125,6 +152,13 @@ class MainActivity : ComponentActivity() {
                                         onNavigateToSecurity = { currentScreen = Screen.SECURITY },
                                         onNavigateToAuth = { currentScreen = Screen.AUTH_LOGIN },
                                         onNavigateToUpiPayment = { currentScreen = Screen.UPI_PAYMENT },
+                                        onNavigateToCategoryDashboard = { stream ->
+                                            activeCategoryStream = stream
+                                            currentScreen = Screen.CATEGORY_DASHBOARD
+                                        },
+                                        onNavigateToDailyStudyTips = {
+                                            currentScreen = Screen.DAILY_STUDY_TIPS
+                                        },
                                         onTriggerNotification = {
                                             NotificationHelper.showNotification(
                                                 this@MainActivity,
@@ -148,10 +182,53 @@ class MainActivity : ComponentActivity() {
                                     )
                                 }
 
+                                Screen.CATEGORY_DASHBOARD -> {
+                                    ExamCategoryDashboardScreen(
+                                        initialStream = activeCategoryStream ?: userProfile.selectedStream,
+                                        examRepository = examRepository,
+                                        isPremiumUnlocked = userProfile.isPremiumUnlocked,
+                                        onStartMockTestForStream = { stream ->
+                                            val tests = examRepository.getMockTestsForStream(stream)
+                                            activeMockTestOverride = tests.firstOrNull() ?: examRepository.getMockTestsForStream(ExamStream.ENGINEERING).first()
+                                            currentScreen = Screen.MOCK_TEST
+                                        },
+                                        onFeedQuestionToAi = { question ->
+                                            activeQuestionForAi = question
+                                            currentScreen = Screen.AI_CHAT
+                                        },
+                                        onNavigateToPyqBank = { currentScreen = Screen.PYQ_BANK },
+                                        onNavigateToFlashcards = { currentScreen = Screen.FLASHCARDS },
+                                        onNavigateToPayment = { currentScreen = Screen.UPI_PAYMENT },
+                                        onBack = { currentScreen = Screen.HOME }
+                                    )
+                                }
+
+                                Screen.DAILY_STUDY_TIPS -> {
+                                    DailyStudyTipsScreen(
+                                        currentStream = userProfile.selectedStream,
+                                        onBack = { currentScreen = Screen.HOME },
+                                        onAskAiAboutTip = { query ->
+                                            coroutineScope.launch {
+                                                aiRepository.sendGeneralQuery(query)
+                                            }
+                                            currentScreen = Screen.AI_CHAT
+                                        },
+                                        onNavigateToCategoryDashboard = { stream ->
+                                            activeCategoryStream = stream
+                                            currentScreen = Screen.CATEGORY_DASHBOARD
+                                        }
+                                    )
+                                }
+
                                 Screen.AI_CHAT -> {
                                     AiChatScreen(
                                         repository = aiRepository,
-                                        onBack = { currentScreen = Screen.HOME },
+                                        examRepository = examRepository,
+                                        initialQuestion = activeQuestionForAi,
+                                        onBack = {
+                                            activeQuestionForAi = null
+                                            currentScreen = Screen.HOME
+                                        },
                                         onTriggerSafetyAlert = { promptText, alertCode ->
                                             emergencyAlertData = Pair(promptText, alertCode)
                                         }
@@ -160,11 +237,14 @@ class MainActivity : ComponentActivity() {
 
                                 Screen.MOCK_TEST -> {
                                     val mockTests = examRepository.getMockTestsForStream(userProfile.selectedStream)
-                                    val activeMockTest = mockTests.firstOrNull() ?: examRepository.getMockTestsForStream(ExamStream.ENGINEERING).first()
+                                    val activeMockTest = activeMockTestOverride ?: mockTests.firstOrNull() ?: examRepository.getMockTestsForStream(ExamStream.ENGINEERING).first()
 
                                     MockTestScreen(
                                         mockTest = activeMockTest,
-                                        onBack = { currentScreen = Screen.HOME },
+                                        onBack = {
+                                            activeMockTestOverride = null
+                                            currentScreen = Screen.HOME
+                                        },
                                         onFinishTest = { resultEntity ->
                                             activeTestResult = resultEntity
                                             coroutineScope.launch {
@@ -215,6 +295,10 @@ class MainActivity : ComponentActivity() {
                                         examRepository = examRepository,
                                         isPremiumUnlocked = userProfile.isPremiumUnlocked,
                                         onNavigateToPayment = { currentScreen = Screen.UPI_PAYMENT },
+                                        onFeedQuestionToAi = { question ->
+                                            activeQuestionForAi = question
+                                            currentScreen = Screen.AI_CHAT
+                                        },
                                         onBack = { currentScreen = Screen.HOME }
                                     )
                                 }

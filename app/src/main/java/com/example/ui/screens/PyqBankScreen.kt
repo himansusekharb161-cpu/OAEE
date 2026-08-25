@@ -34,6 +34,7 @@ fun PyqBankScreen(
     examRepository: ExamRepository,
     isPremiumUnlocked: Boolean = false,
     onNavigateToPayment: () -> Unit = {},
+    onFeedQuestionToAi: (Question) -> Unit = {},
     onBack: () -> Unit
 ) {
     var selectedTab by remember { mutableIntStateOf(0) }
@@ -110,6 +111,7 @@ fun PyqBankScreen(
                         PyqQuestionCard(
                             question = question,
                             isPremiumUnlocked = isPremiumUnlocked,
+                            onFeedQuestionToAi = { onFeedQuestionToAi(question) },
                             onLockedFeatureClick = { feature ->
                                 gatekeeperFeature = feature
                                 showGatekeeperDialog = true
@@ -137,6 +139,7 @@ fun PyqBankScreen(
 fun PyqQuestionCard(
     question: Question,
     isPremiumUnlocked: Boolean = true,
+    onFeedQuestionToAi: () -> Unit = {},
     onLockedFeatureClick: (String) -> Unit = {}
 ) {
     Card(
@@ -222,36 +225,51 @@ fun PyqQuestionCard(
 
             if (isPremiumUnlocked) {
                 Card(
-                    colors = CardDefaults.cardColors(containerColor = Color(0xFFF3EDF7)),
+                    colors = CardDefaults.cardColors(containerColor = Color(0xFF1E293B)),
                     shape = RoundedCornerShape(10.dp),
                     border = BorderStroke(1.dp, AoeeCardBorder),
                     modifier = Modifier.fillMaxWidth()
                 ) {
-                    Row(
-                        modifier = Modifier.padding(12.dp),
-                        verticalAlignment = Alignment.Top
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.AutoAwesome,
-                            contentDescription = null,
-                            tint = ElectricCyan,
-                            modifier = Modifier.size(16.dp)
-                        )
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Column {
-                            Text(
-                                text = "Punyansu AI Step-by-Step Explanation:",
-                                fontSize = 11.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = CyanGlow
+                    Column(modifier = Modifier.padding(12.dp)) {
+                        Row(
+                            verticalAlignment = Alignment.Top
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.AutoAwesome,
+                                contentDescription = null,
+                                tint = ElectricCyan,
+                                modifier = Modifier.size(16.dp)
                             )
-                            Spacer(modifier = Modifier.height(2.dp))
-                            Text(
-                                text = question.explanation,
-                                fontSize = 12.sp,
-                                color = TextWhitePrimary,
-                                lineHeight = 17.sp
-                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = "Punyansu AI Step-by-Step Explanation:",
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = CyanGlow
+                                )
+                                Spacer(modifier = Modifier.height(2.dp))
+                                Text(
+                                    text = question.explanation,
+                                    fontSize = 12.sp,
+                                    color = TextWhitePrimary,
+                                    lineHeight = 17.sp
+                                )
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(10.dp))
+
+                        OutlinedButton(
+                            onClick = onFeedQuestionToAi,
+                            colors = ButtonDefaults.outlinedButtonColors(contentColor = ElectricCyan),
+                            border = BorderStroke(1.dp, CyanGlow.copy(alpha = 0.5f)),
+                            shape = RoundedCornerShape(8.dp),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Icon(imageVector = Icons.Default.AutoAwesome, contentDescription = null, modifier = Modifier.size(16.dp))
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text("🤖 Feed Question to Punyansu AI Mentor", fontSize = 11.sp, fontWeight = FontWeight.Bold)
                         }
                     }
                 }

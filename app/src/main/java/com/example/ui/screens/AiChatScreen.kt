@@ -18,6 +18,8 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material.icons.outlined.*
 import androidx.compose.material3.*
@@ -33,6 +35,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.data.local.ChatMessageEntity
+import com.example.data.model.Question
+import com.example.data.repository.ExamRepository
 import com.example.data.repository.PunyansuAiRepository
 import com.example.data.repository.PunyansuChatResult
 import com.example.ui.theme.*
@@ -40,6 +44,7 @@ import kotlinx.coroutines.launch
 
 enum class ChatCategory(val title: String, val icon: String) {
     FEATURED("🌟 Featured", "🌟"),
+    FEED_QUESTION("🎯 Feed Questions", "🎯"),
     ODISHA_GK("🏛️ OAS & Odisha GK", "🏛️"),
     SCHOOL_NAVODAYA("🏫 Navodaya & OAV", "🏫"),
     TEACHER_PEDAGOGY("👩‍🏫 CT & B.Ed", "👩‍🏫"),
@@ -52,6 +57,8 @@ enum class ChatCategory(val title: String, val icon: String) {
 @Composable
 fun AiChatScreen(
     repository: PunyansuAiRepository,
+    examRepository: ExamRepository? = null,
+    initialQuestion: Question? = null,
     onBack: () -> Unit,
     onTriggerSafetyAlert: (promptText: String, alertCode: String) -> Unit
 ) {
@@ -59,14 +66,24 @@ fun AiChatScreen(
     val coroutineScope = rememberCoroutineScope()
     val snackbarHostState = remember { SnackbarHostState() }
 
+    var showQuestionPickerSheet by remember { mutableStateOf(false) }
+
+    val initialGreeting = remember {
+        if (initialQuestion != null) {
+            "Namaskar! Punyansu AI is analyzing Practice Question: **${initialQuestion.questionText}** (${initialQuestion.subject} • ${initialQuestion.tag})."
+        } else {
+            "Namaskar! I am **Punyansu AI**, your authoritative AI mentor for All Odisha Entrance Examinations (AOEE).\n\n" +
+                    "I can help you master concepts, solve step-by-step numericals, and explain topics across **OJEE, Navodaya, PSMSE, CT/B.Ed, OAS/IAS, Odisha GK, General Science, and Mathematics**.\n\n" +
+                    "💡 *You can now **Feed any Practice Question** directly to me for step-by-step master derivation and 2026 predictions!*"
+        }
+    }
+
     var messages by remember {
         mutableStateOf(
             listOf(
                 ChatMessageEntity(
                     sender = "PUNYANSU_AI",
-                    text = "Namaskar! I am **Punyansu AI**, your authoritative AI mentor for All Odisha Entrance Examinations (AOEE).\n\n" +
-                            "I can help you master concepts, solve step-by-step numericals, and explain topics across **OJEE, Navodaya, PSMSE, CT/B.Ed, OAS/IAS, Odisha GK, General Science, and Mathematics**.\n\n" +
-                            "Choose a category below or ask any question in English or Odia!",
+                    text = initialGreeting,
                     timestamp = System.currentTimeMillis()
                 )
             )
@@ -75,8 +92,77 @@ fun AiChatScreen(
 
     var inputText by remember { mutableStateOf("") }
     var isLoading by remember { mutableStateOf(false) }
-    var selectedCategory by remember { mutableStateOf(ChatCategory.FEATURED) }
+    var selectedCategory by remember { mutableStateOf(if (initialQuestion != null) ChatCategory.FEED_QUESTION else ChatCategory.FEATURED) }
     val listState = rememberLazyListState()
+
+    val availableQuestions = remember {
+        examRepository?.getAllPyqQuestions() ?: emptyList()
+    }
+
+    fun feedQuestion(question: Question, studentDoubt: String? = null, answerIndex: Int? = null) {
+        val userQuestionPrompt = "Feed Practice Question to Punyansu AI:\n\"${question.questionText}\" (${question.subject} • ${question.tag})" +
+                if (!studentDoubt.isNullOrBlank()) "\nStudent Doubt: $studentDoubt" else ""
+
+        val userMsg = ChatMessageEntity(
+            sender = "USER",
+            text = userQuestionPrompt,
+            timestamp = System.currentTimeMillis()
+        )
+        messages = messages + userMsg
+        isLoading = true
+
+        coroutineScope.launch {
+            listState.animateScrollToItem(messages.size - 1)
+
+            val result = repository.feedPracticeQuestion(
+                question = question,
+                studentQuery = studentDoubt,
+                studentAnswerIndex = answerIndex
+            )
+
+            when (result) {
+                is PunyansuChatResult.Success -> {
+                    val aiMsg = ChatMessageEntity(
+                        sender = "PUNYANSU_AI",
+                        text = result.responseText,
+                        timestamp = System.currentTimeMillis()
+                    )
+                    messages = messages + aiMsg
+                    isLoading = false
+                    listState.animateScrollToItem(messages.size - 1)
+                }
+                is PunyansuChatResult.SafetyAlertTriggered -> {
+                    val aiAlertMsg = ChatMessageEntity(
+                        sender = "PUNYANSU_AI",
+                        text = result.message,
+                        timestamp = System.currentTimeMillis(),
+                        isSafetyAlert = true
+                    )
+                    messages = messages + aiAlertMsg
+                    isLoading = false
+                    listState.animateScrollToItem(messages.size - 1)
+                    onTriggerSafetyAlert(result.promptText, result.alertCode)
+                }
+                is PunyansuChatResult.Error -> {
+                    val errorMsg = ChatMessageEntity(
+                        sender = "PUNYANSU_AI",
+                        text = "Error: ${result.errorMessage}",
+                        timestamp = System.currentTimeMillis()
+                    )
+                    messages = messages + errorMsg
+                    isLoading = false
+                    listState.animateScrollToItem(messages.size - 1)
+                }
+            }
+        }
+    }
+
+    // Trigger initial question feed if provided
+    LaunchedEffect(initialQuestion) {
+        if (initialQuestion != null) {
+            feedQuestion(initialQuestion)
+        }
+    }
 
     val categoryPrompts = mapOf(
         ChatCategory.FEATURED to listOf(
@@ -86,6 +172,13 @@ fun AiChatScreen(
             "Jean Piaget's 4 stages of Cognitive Development",
             "Navodaya JNVST Mental Ability tips & shortcuts",
             "Punyansu AI ku olta question (Test Police Alert)"
+        ),
+        ChatCategory.FEED_QUESTION to listOf(
+            "Feed 2024 Physics Kinetic Energy question",
+            "Feed 2023 Chemistry Periodic Table Electron Affinity question",
+            "Feed 2022 Mathematics (sin x)/x limit problem",
+            "Feed 2026 AI Predicted Planck's Constant question",
+            "Feed 2025 Odisha Hirakud Dam GK question"
         ),
         ChatCategory.ODISHA_GK to listOf(
             "Explain Kalinga War (261 BC) and Ashoka's Major Rock Edicts",
@@ -139,6 +232,16 @@ fun AiChatScreen(
 
     fun sendMessage(textToSend: String) {
         if (textToSend.isBlank() || isLoading) return
+
+        // Check if user clicked a feed question prompt shortcut
+        val matchedQuestion = availableQuestions.firstOrNull { q ->
+            textToSend.contains(q.subject, ignoreCase = true) && textToSend.contains("Feed", ignoreCase = true)
+        }
+
+        if (matchedQuestion != null) {
+            feedQuestion(matchedQuestion)
+            return
+        }
 
         val userMsg = ChatMessageEntity(
             sender = "USER",
@@ -236,7 +339,7 @@ fun AiChatScreen(
                                 }
                             }
                             Text(
-                                text = "All Odisha Entrance & GK Tutor • Online",
+                                text = "Gemini AI Question Repository Service • Online",
                                 fontSize = 11.sp,
                                 color = SuccessEmerald
                             )
@@ -245,10 +348,21 @@ fun AiChatScreen(
                 },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
-                        Icon(imageVector = Icons.Default.ArrowBack, contentDescription = "Back", tint = TextWhitePrimary)
+                        Icon(imageVector = Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back", tint = TextWhitePrimary)
                     }
                 },
                 actions = {
+                    IconButton(
+                        onClick = { showQuestionPickerSheet = true },
+                        modifier = Modifier.testTag("feed_question_appbar_btn")
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Quiz,
+                            contentDescription = "Feed Question",
+                            tint = CyanGlow
+                        )
+                    }
+
                     IconButton(onClick = {
                         messages = listOf(
                             ChatMessageEntity(
@@ -361,7 +475,7 @@ fun AiChatScreen(
                         if (isLoading) {
                             CircularProgressIndicator(modifier = Modifier.size(20.dp), color = Color.White, strokeWidth = 2.dp)
                         } else {
-                            Icon(imageVector = Icons.Default.Send, contentDescription = "Send")
+                            Icon(imageVector = Icons.AutoMirrored.Filled.Send, contentDescription = "Send")
                         }
                     }
                 }
@@ -443,7 +557,7 @@ fun AiChatScreen(
                                         if (!isAlert) {
                                             Spacer(modifier = Modifier.width(4.dp))
                                             Text(
-                                                text = "• AI Model",
+                                                text = "• Gemini Powered",
                                                 fontSize = 9.sp,
                                                 color = TextMutedSecondary
                                             )
@@ -477,7 +591,7 @@ fun AiChatScreen(
                             // Interactive Quick Follow-up Buttons for AI responses (except alert)
                             if (!isUser && !isAlert && message.text.length > 50) {
                                 Spacer(modifier = Modifier.height(10.dp))
-                                Divider(color = AoeeCardBorder.copy(alpha = 0.5f), thickness = 0.5.dp)
+                                HorizontalDivider(color = AoeeCardBorder.copy(alpha = 0.5f), thickness = 0.5.dp)
                                 Spacer(modifier = Modifier.height(8.dp))
 
                                 Row(
@@ -534,7 +648,7 @@ fun AiChatScreen(
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
                                 Text(
-                                    text = "Punyansu AI is synthesizing answer...",
+                                    text = "Punyansu AI is synthesizing answer via Gemini Service...",
                                     fontSize = 12.sp,
                                     color = CyanGlow
                                 )
@@ -544,6 +658,67 @@ fun AiChatScreen(
                 }
             }
         }
+    }
+
+    // Question Feeder Sheet / Dialog
+    if (showQuestionPickerSheet) {
+        AlertDialog(
+            onDismissRequest = { showQuestionPickerSheet = false },
+            title = {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(imageVector = Icons.Default.Quiz, contentDescription = null, tint = ElectricCyan)
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text("Feed Practice Question to AI", fontWeight = FontWeight.Bold, color = TextWhitePrimary, fontSize = 16.sp)
+                }
+            },
+            text = {
+                Column(modifier = Modifier.fillMaxWidth()) {
+                    Text(
+                        text = "Select any verified AOEE practice question to feed into the Punyansu AI Gemini model for deep derivation & prediction:",
+                        fontSize = 12.sp,
+                        color = TextMutedSecondary
+                    )
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    LazyColumn(
+                        modifier = Modifier.heightIn(max = 280.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        items(availableQuestions) { q ->
+                            Surface(
+                                color = Color(0xFF1E293B),
+                                shape = RoundedCornerShape(10.dp),
+                                border = BorderStroke(1.dp, CyanGlow.copy(alpha = 0.3f)),
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clickable {
+                                        showQuestionPickerSheet = false
+                                        feedQuestion(q)
+                                    }
+                            ) {
+                                Column(modifier = Modifier.padding(10.dp)) {
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.SpaceBetween
+                                    ) {
+                                        Text(q.subject, fontSize = 11.sp, fontWeight = FontWeight.Bold, color = CyanGlow)
+                                        Text(q.tag, fontSize = 9.sp, color = SuccessEmerald, fontWeight = FontWeight.Bold)
+                                    }
+                                    Spacer(modifier = Modifier.height(4.dp))
+                                    Text(q.questionText, fontSize = 12.sp, color = TextWhitePrimary, maxLines = 2)
+                                }
+                            }
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { showQuestionPickerSheet = false }) {
+                    Text("Close", color = ElectricCyan)
+                }
+            },
+            containerColor = AoeeCardBg
+        )
     }
 }
 

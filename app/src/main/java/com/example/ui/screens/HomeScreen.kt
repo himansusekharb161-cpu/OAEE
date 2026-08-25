@@ -7,6 +7,8 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -28,8 +30,12 @@ import androidx.compose.ui.unit.sp
 import com.example.R
 import com.example.data.model.ExamStream
 import com.example.data.model.UserProfile
+import com.example.data.repository.DailyStudyTipsProvider
+import com.example.data.repository.ExamCategoryProvider
 import com.example.ui.components.PremiumGatekeeperDialog
 import com.example.ui.theme.*
+import com.example.util.DailyStudyTipsManager
+import androidx.compose.ui.platform.LocalContext
 
 @Composable
 fun HomeScreen(
@@ -45,6 +51,8 @@ fun HomeScreen(
     onNavigateToSecurity: () -> Unit,
     onNavigateToAuth: () -> Unit,
     onNavigateToUpiPayment: () -> Unit,
+    onNavigateToCategoryDashboard: (ExamStream) -> Unit,
+    onNavigateToDailyStudyTips: () -> Unit,
     onTriggerNotification: () -> Unit,
     onTriggerSafetyTest: () -> Unit,
     onLogout: () -> Unit
@@ -230,15 +238,27 @@ fun HomeScreen(
                     ) {
                         Surface(
                             color = GoldAccent,
-                            shape = RoundedCornerShape(6.dp)
+                            shape = RoundedCornerShape(6.dp),
+                            modifier = Modifier.clickable { onNavigateToCategoryDashboard(userProfile.selectedStream) }
                         ) {
-                            Text(
-                                text = userProfile.selectedStream.displayName,
-                                fontSize = 10.sp,
-                                fontWeight = FontWeight.ExtraBold,
-                                color = Color.Black,
-                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
-                            )
+                            Row(
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(
+                                    text = userProfile.selectedStream.displayName,
+                                    fontSize = 10.sp,
+                                    fontWeight = FontWeight.ExtraBold,
+                                    color = Color.Black
+                                )
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Icon(
+                                    imageVector = Icons.Default.Launch,
+                                    contentDescription = null,
+                                    tint = Color.Black,
+                                    modifier = Modifier.size(10.dp)
+                                )
+                            }
                         }
 
                         Spacer(modifier = Modifier.height(4.dp))
@@ -255,6 +275,270 @@ fun HomeScreen(
                             fontSize = 11.sp,
                             color = CyanGlow
                         )
+                    }
+                }
+            }
+        }
+
+        // --- DAILY STUDY TIP OF THE DAY NOTIFICATION BANNER ---
+        item {
+            val context = LocalContext.current
+            val todayTip = remember(userProfile.selectedStream) {
+                DailyStudyTipsProvider.getTipOfTheDay(userProfile.selectedStream)
+            }
+
+            Spacer(modifier = Modifier.height(16.dp))
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 20.dp)
+                    .clickable { onNavigateToDailyStudyTips() }
+                    .testTag("home_daily_study_tip_banner"),
+                shape = RoundedCornerShape(16.dp),
+                colors = CardDefaults.cardColors(containerColor = DeepIndigo),
+                border = BorderStroke(1.dp, CyanGlow.copy(alpha = 0.6f))
+            ) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(14.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Surface(
+                                color = CyanGlow,
+                                shape = RoundedCornerShape(4.dp)
+                            ) {
+                                Text(
+                                    text = "💡 DAILY STUDY TIP",
+                                    fontSize = 8.sp,
+                                    fontWeight = FontWeight.ExtraBold,
+                                    color = Color.Black,
+                                    modifier = Modifier.padding(horizontal = 5.dp, vertical = 2.dp)
+                                )
+                            }
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text(
+                                text = todayTip.examTarget,
+                                fontSize = 9.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = GoldAccent
+                            )
+                        }
+
+                        Surface(
+                            color = AoeeNavyBg,
+                            shape = RoundedCornerShape(6.dp),
+                            border = BorderStroke(0.5.dp, AoeeCardBorder),
+                            modifier = Modifier.clickable {
+                                DailyStudyTipsManager.triggerTestNotification(context, userProfile.selectedStream)
+                            }
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.NotificationsActive,
+                                    contentDescription = "Test notification",
+                                    tint = CyanGlow,
+                                    modifier = Modifier.size(10.dp)
+                                )
+                                Spacer(modifier = Modifier.width(3.dp))
+                                Text(
+                                    text = "Test Alert",
+                                    fontSize = 8.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = CyanGlow
+                                )
+                            }
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    Text(
+                        text = todayTip.title,
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = TextWhitePrimary
+                    )
+
+                    Spacer(modifier = Modifier.height(3.dp))
+
+                    Text(
+                        text = todayTip.englishAdvice,
+                        fontSize = 11.sp,
+                        color = TextMutedSecondary,
+                        maxLines = 2,
+                        lineHeight = 15.sp
+                    )
+
+                    Spacer(modifier = Modifier.height(6.dp))
+
+                    Text(
+                        text = "📖 ${todayTip.odiaAdvice}",
+                        fontSize = 10.sp,
+                        color = GoldAccent,
+                        maxLines = 1
+                    )
+
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = "⚡ Rule: ${todayTip.actionableRule}",
+                            fontSize = 9.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = CyanGlow,
+                            modifier = Modifier.weight(1f),
+                            maxLines = 1
+                        )
+
+                        Text(
+                            text = "View Tips & Schedule →",
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = CyanGlow
+                        )
+                    }
+                }
+            }
+        }
+
+        // --- ENTRANCE EXAM CATEGORY DASHBOARDS CAROUSEL ---
+        item {
+            Spacer(modifier = Modifier.height(20.dp))
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 20.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column {
+                    Text(
+                        text = "EXAM CATEGORY DASHBOARDS",
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = ElectricCyan,
+                        letterSpacing = 1.sp
+                    )
+                    Text(
+                        text = "ପ୍ରବେଶିକା ପରୀକ୍ଷା ବିଭାଗ ଡ୍ୟାସବୋର୍ଡ଼",
+                        fontSize = 11.sp,
+                        color = GoldAccent
+                    )
+                }
+
+                Surface(
+                    color = DeepIndigo,
+                    shape = RoundedCornerShape(8.dp),
+                    border = BorderStroke(1.dp, AoeeCardBorder),
+                    modifier = Modifier.clickable { onNavigateToCategoryDashboard(userProfile.selectedStream) }
+                ) {
+                    Text(
+                        text = "View All →",
+                        fontSize = 10.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = ElectricCyan,
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(10.dp))
+
+            val categoryCards = listOf(
+                Triple(ExamStream.CT_ENTRANCE, "Odisha CT / D.El.Ed", "Teacher Entrance • Pedagogy • Odia Grammar"),
+                Triple(ExamStream.ENGINEERING, "OJEE B.Tech / Lateral", "120 Qs CBT • OUTR / VSSUT / PMEC"),
+                Triple(ExamStream.NAVODAYA_ENTRANCE, "JNVST Navodaya", "Class 6 & 9 • Mental Ability & Arithmetic"),
+                Triple(ExamStream.PATHANI_SAMANTA, "Pathani Samanta (PSMSE)", "State Mathematics Talent Search"),
+                Triple(ExamStream.OAV_ENTRANCE, "OAV Adarsha Vidyalaya", "Class 6 & 9 English Medium CBSE Model"),
+                Triple(ExamStream.OAS_IAS_CIVIL, "OPSC OAS Civil Services", "Odisha Administrative & State Services"),
+                Triple(ExamStream.MEDICAL_PHARMA, "OJEE B.Pharm / Medical", "Pharmacy & Paramedical Entrance"),
+                Triple(ExamStream.DIPLOMA_DET, "Odisha DET Polytechnic", "Diploma Engineering & ITI Admissions"),
+                Triple(ExamStream.ADULT_CONTINUING_ED, "OSOU Adult Ed (Up to 55+ Yrs)", "Lifelong Learning & Open Degree"),
+                Triple(ExamStream.TEACHER_OTET, "OTET / B.Ed Eligibility", "Paper I & II Teaching Aptitude"),
+                Triple(ExamStream.GRADUATION_CPET, "CPET Degree / PG", "Ravenshaw & Utkal PG Master's"),
+                Triple(ExamStream.ODISHA_ALL_ENTRANCE, "Odisha All Govt (OSSC)", "Combined Recruitment Exams")
+            )
+
+            LazyRow(
+                modifier = Modifier.fillMaxWidth(),
+                contentPadding = PaddingValues(horizontal = 20.dp),
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                items(categoryCards) { (stream, title, desc) ->
+                    val isUserStream = stream == userProfile.selectedStream
+                    Card(
+                        modifier = Modifier
+                            .width(220.dp)
+                            .clickable { onNavigateToCategoryDashboard(stream) }
+                            .testTag("category_tile_${stream.name.lowercase()}"),
+                        shape = RoundedCornerShape(16.dp),
+                        colors = CardDefaults.cardColors(containerColor = if (isUserStream) DeepIndigo else AoeeCardBg),
+                        border = BorderStroke(1.dp, if (isUserStream) ElectricCyan else AoeeCardBorder)
+                    ) {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(14.dp)
+                        ) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Surface(
+                                    color = if (isUserStream) ElectricCyan else GoldAccent.copy(alpha = 0.2f),
+                                    shape = RoundedCornerShape(4.dp)
+                                ) {
+                                    Text(
+                                        text = if (isUserStream) "MY STREAM ⭐" else "ENTRANCE",
+                                        fontSize = 8.sp,
+                                        fontWeight = FontWeight.ExtraBold,
+                                        color = if (isUserStream) Color.Black else GoldAccent,
+                                        modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp)
+                                    )
+                                }
+
+                                Icon(
+                                    imageVector = Icons.Default.ArrowForward,
+                                    contentDescription = null,
+                                    tint = if (isUserStream) ElectricCyan else TextMutedSecondary,
+                                    modifier = Modifier.size(16.dp)
+                                )
+                            }
+
+                            Spacer(modifier = Modifier.height(8.dp))
+
+                            Text(
+                                text = title,
+                                fontSize = 14.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = TextWhitePrimary,
+                                maxLines = 1
+                            )
+
+                            Spacer(modifier = Modifier.height(4.dp))
+
+                            Text(
+                                text = desc,
+                                fontSize = 10.sp,
+                                color = TextMutedSecondary,
+                                lineHeight = 14.sp,
+                                maxLines = 2
+                            )
+                        }
                     }
                 }
             }
@@ -355,6 +639,30 @@ fun HomeScreen(
                 modifier = Modifier.padding(horizontal = 20.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
+                // 0. Dedicated Exam Category Dashboards Card
+                MainFeatureCard(
+                    title = "🏛️ Entrance Category Dashboards (CT, OJEE, Navodaya...)",
+                    subtitle = "Stream-specific resource hubs, subject weightages, syllabus modules & customized CBT speed drills for all 16 Odisha exams.",
+                    icon = Icons.Default.Category,
+                    badgeText = "16 EXAM DASHBOARDS",
+                    badgeColor = CyanGlow,
+                    cardBg = DeepIndigo,
+                    testTag = "category_dashboards_main_tile",
+                    onClick = { onNavigateToCategoryDashboard(userProfile.selectedStream) }
+                )
+
+                // 0.5. Daily Study Tips Notification Service
+                MainFeatureCard(
+                    title = "💡 Daily Study Tips & Notification Service",
+                    subtitle = "Short, actionable daily advice, formula revisions, Odia summaries & automated study reminders for all Odisha aspirants.",
+                    icon = Icons.Default.Lightbulb,
+                    badgeText = "DAILY TIPS & ALERTS",
+                    badgeColor = GoldAccent,
+                    cardBg = AoeeCardBg,
+                    testTag = "daily_study_tips_main_tile",
+                    onClick = onNavigateToDailyStudyTips
+                )
+
                 // 1. AI Chatbot Card
                 MainFeatureCard(
                     title = "Punyansu AI Entrance Chatbot",

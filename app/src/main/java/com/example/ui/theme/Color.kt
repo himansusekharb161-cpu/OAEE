@@ -4,6 +4,7 @@ import androidx.compose.ui.graphics.Color
 
 // Clean Minimalism Palette (#FEF7FF)
 val AoeeNavyBg = Color(0xFFFEF7FF)        // Clean Lavender Off-White Main Canvas
+val AoeeNavySurface = Color(0xFFF3EDF7)   // Clean Light Surface Container
 val AoeeCardBg = Color(0xFFFFFFFF)        // Clean White Card Canvas
 val AoeeCardBorder = Color(0xFFCAC4D0)    // Minimal Soft Border
 
@@ -15,6 +16,7 @@ val GoldAccent = Color(0xFF6750A4)        // M3 Purple Brand Accent
 val AmberGlow = Color(0xFF7D5260)        // Secondary Accent
 
 val PoliceRedAlert = Color(0xFFB3261E)    // M3 Security Red Alert Text/Accent
+val ErrorCrimson = Color(0xFFB3261E)      // Error Crimson Red
 val PoliceAlertBg = Color(0xFFFDE7E9)     // Soft Light Pink Security Background
 val PoliceAlertBorder = Color(0xFFF9DEDC) // Soft Light Red Border
 val PoliceSirenBlue = Color(0xFF21005D)   // M3 Dark Purple Siren
